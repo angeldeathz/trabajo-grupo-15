@@ -1,0 +1,1 @@
+“A través de entrevistas con más de 30 personas, incluyendo radiólogos y profesionales del área médica, validamos que existe una necesidad real de automatizar la detección de fracturas óseas. Aplicamos principios de The Mom Test para evitar sesgos en las respuestas.”

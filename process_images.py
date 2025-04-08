@@ -16,36 +16,57 @@ Path(os.path.join(output_dir, 'test', 'fractured')).mkdir(parents=True, exist_ok
 Path(os.path.join(output_dir, 'test', 'not_fractured')).mkdir(parents=True, exist_ok=True)
 
 # Función de preprocesamiento de una sola imagen
-def preprocess_image(image_path):
+def preprocess_image(image_path, return_hog=False):
     # Cargar la imagen
     image = cv2.imread(image_path)
 
+    if image is None:
+        print(f"⚠️ No se pudo cargar: {image_path}")
+        return None
+
     # Convertir a escala de grises
-    image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     # Ajuste de contraste (ecualización de histograma)
-    image_eq = cv2.equalizeHist(image_gray)
+    equalized = cv2.equalizeHist(gray)
 
-    # Reducción de ruido con filtro gaussiano
-    image_blur = cv2.GaussianBlur(image_eq, (5, 5), 0)
+    # Reducción de ruido
+    blurred = cv2.GaussianBlur(equalized, (5, 5), 0)
 
-    # Detección de bordes con Canny
-    edges = cv2.Canny(image_blur, 100, 200)
+    # Detección de bordes
+    edges = cv2.Canny(blurred, 100, 200)
 
-    # Normalización de la imagen (escala de 0 a 1)
-    image_normalized = edges / 255.0  # Si es necesario para la red neuronal
+    # Operación morfológica (closing para cerrar pequeños huecos)
+    kernel = np.ones((3, 3), np.uint8)
+    morphed = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
 
-    return image_normalized
+    # Normalización
+    normalized = morphed / 255.0
+
+    # Si queremos usar un modelo clásico como SVM, retornamos descriptores
+    if return_hog:
+        hog = cv2.HOGDescriptor()
+        h = hog.compute(morphed)
+        return h  # vector de características
+
+    return normalized  # imagen procesada lista para red neuronal
+
 
 # Función para procesar todas las imágenes en una carpeta
-def process_images(input_dir, output_dir):
+def process_images(input_dir, output_dir, max_images_per_class=1500):
     subdir = Path(input_dir).name  # "train" o "test"
     
     for class_folder in os.listdir(input_dir):
         class_path = os.path.join(input_dir, class_folder)
 
         if os.path.isdir(class_path):  # Verificar que es una carpeta
+            processed_count = 0  # Contador para las imágenes procesadas
+
             for image_name in os.listdir(class_path):
+                # Si ya se procesaron max_images_per_class imágenes, detenerse
+                if processed_count >= max_images_per_class:
+                    break
+                
                 image_path = os.path.join(class_path, image_name)
 
                 if image_name.lower().endswith(('.jpg', '.jpeg', '.png')):  # Más robusto
@@ -68,6 +89,8 @@ def process_images(input_dir, output_dir):
                     success = cv2.imwrite(output_image_path, (processed_image * 255).astype(np.uint8))
                     if not success:
                         print(f'❌ No se pudo guardar la imagen en: {output_image_path}')
+
+                    processed_count += 1  # Incrementar el contador después de procesar una imagen
 
 # Preprocesar las imágenes de entrenamiento
 process_images(input_train_dir, output_dir)
